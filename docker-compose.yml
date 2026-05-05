@@ -1,0 +1,105 @@
+services:
+  # ── MySQL ──────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: hotel_wa_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret_change_me}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hotel_wa_saas}
+      MYSQL_USER: ${MYSQL_USER:-wauser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-wapassword_change_me}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_secret_change_me}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hotel_wa_net
+
+  # ── Redis ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: hotel_wa_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secret_change_me} --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret_change_me}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - hotel_wa_net
+
+  # ── Backend (NestJS) ───────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: hotel_wa_backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: mysql://${MYSQL_USER:-wauser}:${MYSQL_PASSWORD:-wapassword_change_me}@mysql:3306/${MYSQL_DATABASE:-hotel_wa_saas}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret_change_me}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      WA_ACCESS_TOKEN: ${WA_ACCESS_TOKEN}
+      WA_PHONE_NUMBER_ID: ${WA_PHONE_NUMBER_ID:-}
+      WA_WABA_ID: ${WA_WABA_ID:-}
+      WA_API_VERSION: ${WA_API_VERSION:-v18.0}
+      WA_API_BASE: https://graph.facebook.com
+      WEBHOOK_VERIFY_TOKEN: ${WEBHOOK_VERIFY_TOKEN:-apple}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
+    ports:
+      - "3001:3001"
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - hotel_wa_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Frontend (React/Vite static) ───────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hotel_wa_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    networks:
+      - hotel_wa_net
+
+volumes:
+  mysql_data:
+  redis_data:
+  backend_uploads:
+
+networks:
+  hotel_wa_net:
+    driver: bridge

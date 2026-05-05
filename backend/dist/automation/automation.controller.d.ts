@@ -1,0 +1,161 @@
+import { AutomationService } from './automation.service';
+import { CreateAutomationRuleDto } from './dto/create-automation-rule.dto';
+import { UpdateAutomationRuleDto } from './dto/update-automation-rule.dto';
+export declare class AutomationController {
+    private readonly automationService;
+    constructor(automationService: AutomationService);
+    findAll(req: any): Promise<({
+        template: {
+            id: string;
+            name: string;
+            category: import(".prisma/client").$Enums.TemplateCategory;
+        };
+    } & {
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        hotelId: string;
+        name: string;
+        templateId: string;
+        createdById: string;
+        description: string | null;
+        triggerType: import(".prisma/client").$Enums.TriggerType;
+        triggerOffsetHours: number;
+        triggerOffsetDirection: import(".prisma/client").$Enums.OffsetDir;
+        sendTime: string | null;
+        audienceType: import(".prisma/client").$Enums.AudienceType;
+        audienceFilter: import("@prisma/client/runtime/library").JsonValue | null;
+        variableValues: import("@prisma/client/runtime/library").JsonValue | null;
+        conditions: import("@prisma/client/runtime/library").JsonValue | null;
+        runCount: number;
+        lastRunAt: Date | null;
+        deletedAt: Date | null;
+    })[]>;
+    findOne(req: any, id: string): Promise<{
+        template: {
+            id: string;
+            name: string;
+            category: import(".prisma/client").$Enums.TemplateCategory;
+        };
+    } & {
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        hotelId: string;
+        name: string;
+        templateId: string;
+        createdById: string;
+        description: string | null;
+        triggerType: import(".prisma/client").$Enums.TriggerType;
+        triggerOffsetHours: number;
+        triggerOffsetDirection: import(".prisma/client").$Enums.OffsetDir;
+        sendTime: string | null;
+        audienceType: import(".prisma/client").$Enums.AudienceType;
+        audienceFilter: import("@prisma/client/runtime/library").JsonValue | null;
+        variableValues: import("@prisma/client/runtime/library").JsonValue | null;
+        conditions: import("@prisma/client/runtime/library").JsonValue | null;
+        runCount: number;
+        lastRunAt: Date | null;
+        deletedAt: Date | null;
+    }>;
+    create(req: any, dto: CreateAutomationRuleDto): Promise<{
+        template: {
+            id: string;
+            name: string;
+        };
+    } & {
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        hotelId: string;
+        name: string;
+        templateId: string;
+        createdById: string;
+        description: string | null;
+        triggerType: import(".prisma/client").$Enums.TriggerType;
+        triggerOffsetHours: number;
+        triggerOffsetDirection: import(".prisma/client").$Enums.OffsetDir;
+        sendTime: string | null;
+        audienceType: import(".prisma/client").$Enums.AudienceType;
+        audienceFilter: import("@prisma/client/runtime/library").JsonValue | null;
+        variableValues: import("@prisma/client/runtime/library").JsonValue | null;
+        conditions: import("@prisma/client/runtime/library").JsonValue | null;
+        runCount: number;
+        lastRunAt: Date | null;
+        deletedAt: Date | null;
+    }>;
+    update(req: any, id: string, dto: UpdateAutomationRuleDto): Promise<{
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        hotelId: string;
+        name: string;
+        templateId: string;
+        createdById: string;
+        description: string | null;
+        triggerType: import(".prisma/client").$Enums.TriggerType;
+        triggerOffsetHours: number;
+        triggerOffsetDirection: import(".prisma/client").$Enums.OffsetDir;
+        sendTime: string | null;
+        audienceType: import(".prisma/client").$Enums.AudienceType;
+        audienceFilter: import("@prisma/client/runtime/library").JsonValue | null;
+        variableValues: import("@prisma/client/runtime/library").JsonValue | null;
+        conditions: import("@prisma/client/runtime/library").JsonValue | null;
+        runCount: number;
+        lastRunAt: Date | null;
+        deletedAt: Date | null;
+    }>;
+    softDelete(req: any, id: string): Promise<{
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        hotelId: string;
+        name: string;
+        templateId: string;
+        createdById: string;
+        description: string | null;
+        triggerType: import(".prisma/client").$Enums.TriggerType;
+        triggerOffsetHours: number;
+        triggerOffsetDirection: import(".prisma/client").$Enums.OffsetDir;
+        sendTime: string | null;
+        audienceType: import(".prisma/client").$Enums.AudienceType;
+        audienceFilter: import("@prisma/client/runtime/library").JsonValue | null;
+        variableValues: import("@prisma/client/runtime/library").JsonValue | null;
+        conditions: import("@prisma/client/runtime/library").JsonValue | null;
+        runCount: number;
+        lastRunAt: Date | null;
+        deletedAt: Date | null;
+    }>;
+    toggle(req: any, id: string): Promise<{
+        id: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        hotelId: string;
+        name: string;
+        templateId: string;
+        createdById: string;
+        description: string | null;
+        triggerType: import(".prisma/client").$Enums.TriggerType;
+        triggerOffsetHours: number;
+        triggerOffsetDirection: import(".prisma/client").$Enums.OffsetDir;
+        sendTime: string | null;
+        audienceType: import(".prisma/client").$Enums.AudienceType;
+        audienceFilter: import("@prisma/client/runtime/library").JsonValue | null;
+        variableValues: import("@prisma/client/runtime/library").JsonValue | null;
+        conditions: import("@prisma/client/runtime/library").JsonValue | null;
+        runCount: number;
+        lastRunAt: Date | null;
+        deletedAt: Date | null;
+    }>;
+    runNow(req: any, id: string): Promise<{
+        sent: number;
+        failed: number;
+        errors: string[];
+    }>;
+}

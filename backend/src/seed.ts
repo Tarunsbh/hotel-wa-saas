@@ -1,0 +1,111 @@
+/**
+ * Database seed script — compiled to dist/seed.js and run at container startup.
+ * - Creates default hotel + admin user if none exist
+ * - Always syncs WA_PHONE_NUMBER_ID / WA_WABA_ID from env to existing hotel
+ *   so the webhook can find the hotel by phoneNumberId
+ */
+
+import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('🌱 Running startup seed/sync...');
+
+  const envPhoneId  = process.env.WA_PHONE_NUMBER_ID || '';
+  const envWabaId   = process.env.WA_WABA_ID         || '';
+  const verifyToken = process.env.WEBHOOK_VERIFY_TOKEN || 'apple';
+
+  let hotel = await prisma.hotel.findFirst({ where: { deletedAt: null } });
+
+  if (!hotel) {
+    // ── First run: create hotel + admin ──────────────────────────────────
+    console.log('🆕 No hotel found — creating default hotel and admin user...');
+    const hotelId = uuidv4();
+
+    hotel = await prisma.hotel.create({
+      data: {
+        id:                 hotelId,
+        name:               'Demo Hotel',
+        slug:               'demo-hotel',
+        phoneNumberId:      envPhoneId  || 'CONFIGURE_IN_SETTINGS',
+        wabaId:             envWabaId   || 'CONFIGURE_IN_SETTINGS',
+        webhookVerifyToken: verifyToken,
+        timezone:           'Asia/Kolkata',
+        country:            'IN',
+        plan:               'STARTER',
+        isActive:           true,
+      },
+    });
+
+    const passwordHash = await bcrypt.hash('Admin@123', 12);
+    await prisma.user.create({
+      data: {
+        id:           uuidv4(),
+        hotelId:      hotel.id,
+        email:        'admin@demo.com',
+        passwordHash,
+        name:         'Admin User',
+        role:         'ADMIN',
+        isActive:     true,
+      },
+    });
+
+    console.log('─────────────────────────────────────────────────');
+    console.log('✅ Default account created!');
+    console.log('   Email   : admin@demo.com');
+    console.log('   Password: Admin@123');
+    console.log('   ⚠️  Change password after first login!');
+    console.log('─────────────────────────────────────────────────');
+  } else {
+    console.log(`✅ Hotel exists: "${hotel.name}" (id=${hotel.id})`);
+  }
+
+  // ── Always sync env vars to hotel record ──────────────────────────────────
+  // This ensures the webhook can find the hotel by phoneNumberId even after
+  // re-creating the container with new env vars.
+  const needsUpdate: any = {};
+
+  if (envPhoneId && hotel.phoneNumberId !== envPhoneId) {
+    needsUpdate.phoneNumberId = envPhoneId;
+    console.log(`🔄 Updating hotel.phoneNumberId: "${hotel.phoneNumberId}" → "${envPhoneId}"`);
+  }
+  if (envWabaId && hotel.wabaId !== envWabaId) {
+    needsUpdate.wabaId = envWabaId;
+    console.log(`🔄 Updating hotel.wabaId: "${hotel.wabaId}" → "${envWabaId}"`);
+  }
+  if (hotel.webhookVerifyToken !== verifyToken) {
+    needsUpdate.webhookVerifyToken = verifyToken;
+    console.log(`🔄 Updating hotel.webhookVerifyToken → "${verifyToken}"`);
+  }
+
+  if (Object.keys(needsUpdate).length > 0) {
+    await prisma.hotel.update({ where: { id: hotel.id }, data: needsUpdate });
+    console.log('✅ Hotel env vars synced');
+  } else {
+    console.log('✅ Hotel config already up to date');
+  }
+
+  // ── Print current config ──────────────────────────────────────────────────
+  const updated = await prisma.hotel.findFirst({ where: { id: hotel.id } });
+  console.log('');
+  console.log('📋 Current hotel config:');
+  console.log(`   phoneNumberId      : ${updated?.phoneNumberId}`);
+  console.log(`   wabaId             : ${updated?.wabaId}`);
+  console.log(`   webhookVerifyToken : ${updated?.webhookVerifyToken}`);
+  console.log('');
+
+  if (!updated?.phoneNumberId || updated.phoneNumberId === 'CONFIGURE_IN_SETTINGS') {
+    console.log('⚠️  WARNING: phoneNumberId is not configured!');
+    console.log('   Incoming WhatsApp messages will NOT be received.');
+    console.log('   Set WA_PHONE_NUMBER_ID in your .env and restart.');
+    console.log('   OR go to Settings page and enter it there.');
+    console.log('');
+  }
+}
+
+main()
+  .catch((e) => { console.error('Seed error:', e.message); })
+  .finally(() => prisma.$disconnect());

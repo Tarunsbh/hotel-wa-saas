@@ -1,0 +1,584 @@
+// Prisma Schema — Hotel WhatsApp SaaS
+// Generator: @prisma/client
+// Datasource: MySQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── HOTEL ───────────────────────────────────────────────────
+model Hotel {
+  id                   String   @id @default(uuid())
+  name                 String
+  slug                 String   @unique
+  phoneNumberId        String   @map("phone_number_id")
+  wabaId               String   @map("waba_id")
+  businessId           String?  @map("business_id")
+  webhookVerifyToken   String   @map("webhook_verify_token")
+  timezone             String   @default("UTC")
+  country              String   @default("IN")
+  plan                 Plan     @default(STARTER)
+  isActive             Boolean  @default(true) @map("is_active")
+  settings             Json?
+  deletedAt            DateTime? @map("deleted_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  users               User[]
+  guests              Guest[]
+  templates           Template[]
+  campaigns           Campaign[]
+  conversations       Conversation[]
+  messages            Message[]
+  automationRules     AutomationRule[]
+  automationLogs      AutomationLog[]
+  tokens              TokenStorage[]
+  tags                Tag[]
+  logs                Log[]
+
+  @@index([wabaId])
+  @@index([phoneNumberId])
+  @@map("hotels")
+}
+
+enum Plan {
+  STARTER      @map("starter")
+  PROFESSIONAL @map("professional")
+  ENTERPRISE   @map("enterprise")
+}
+
+// ─── USER ────────────────────────────────────────────────────
+model User {
+  id           String    @id @default(uuid())
+  hotelId      String    @map("hotel_id")
+  email        String
+  passwordHash String    @map("password_hash")
+  name         String
+  role         Role      @default(AGENT)
+  avatarUrl    String?   @map("avatar_url")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  hotel        Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  conversations Conversation[] @relation("AgentConversations")
+  campaigns    Campaign[]
+  automationRules AutomationRule[]
+  sentMessages Message[]
+
+  @@unique([email, hotelId])
+  @@index([hotelId])
+  @@map("users")
+}
+
+enum Role {
+  ADMIN   @map("admin")
+  MANAGER @map("manager")
+  AGENT   @map("agent")
+}
+
+// ─── TOKEN STORAGE ───────────────────────────────────────────
+model TokenStorage {
+  id           String      @id @default(uuid())
+  hotelId      String      @map("hotel_id")
+  tokenType    TokenType   @default(ACCESS) @map("token_type")
+  tokenValue   String      @db.Text @map("token_value")
+  tokenHash    String      @map("token_hash")
+  appId        String?     @map("app_id")
+  scopes       Json?
+  expiresAt    DateTime?   @map("expires_at")
+  refreshAt    DateTime?   @map("refresh_at")
+  isActive     Boolean     @default(true) @map("is_active")
+  refreshCount Int         @default(0) @map("refresh_count")
+  lastRefreshed DateTime?  @map("last_refreshed")
+  lastUsedAt   DateTime?   @map("last_used_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  hotel        Hotel       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@index([tokenType, isActive])
+  @@index([refreshAt])
+  @@map("token_storage")
+}
+
+enum TokenType {
+  ACCESS      @map("access")
+  REFRESH     @map("refresh")
+  SYSTEM_USER @map("system_user")
+}
+
+// ─── TAG ─────────────────────────────────────────────────────
+model Tag {
+  id        String   @id @default(uuid())
+  hotelId   String   @map("hotel_id")
+  name      String
+  color     String   @default("#6366f1")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  hotel     Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  guests    GuestTag[]
+
+  @@unique([name, hotelId])
+  @@index([hotelId])
+  @@map("tags")
+}
+
+// ─── GUEST ───────────────────────────────────────────────────
+model Guest {
+  id            String      @id @default(uuid())
+  hotelId       String      @map("hotel_id")
+  phone         String
+  name          String?
+  email         String?
+  countryCode   String?     @map("country_code")
+  language      String      @default("en")
+  gender        Gender?
+  stayStatus    StayStatus  @default(NO_STAY) @map("stay_status")
+  checkInDate   DateTime?   @db.Date @map("check_in_date")
+  checkOutDate  DateTime?   @db.Date @map("check_out_date")
+  roomNumber    String?     @map("room_number")
+  bookingRef    String?     @map("booking_ref")
+  pmsGuestId    String?     @map("pms_guest_id")
+  nationality   String?
+  notes         String?     @db.Text
+  optIn         Boolean     @default(true) @map("opt_in")
+  optInAt       DateTime?   @map("opt_in_at")
+  optOutAt      DateTime?   @map("opt_out_at")
+  source        GuestSource @default(MANUAL)
+  customFields  Json?       @map("custom_fields")
+  deletedAt     DateTime?   @map("deleted_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  hotel         Hotel          @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  guestTags     GuestTag[]
+  conversations Conversation[]
+  campaignRcpts CampaignRecipient[]
+  automationLogs AutomationLog[]
+
+  @@unique([phone, hotelId])
+  @@index([hotelId])
+  @@index([stayStatus])
+  @@index([checkInDate])
+  @@index([checkOutDate])
+  @@map("guests")
+}
+
+enum Gender {
+  MALE   @map("male")
+  FEMALE @map("female")
+  OTHER  @map("other")
+}
+
+enum StayStatus {
+  ARRIVING    @map("arriving")
+  IN_HOUSE    @map("in_house")
+  CHECKED_OUT @map("checked_out")
+  NO_STAY     @map("no_stay")
+}
+
+enum GuestSource {
+  MANUAL @map("manual")
+  CSV    @map("csv")
+  PMS    @map("pms")
+  API    @map("api")
+}
+
+model GuestTag {
+  guestId   String   @map("guest_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  guest     Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([guestId, tagId])
+  @@map("guest_tags")
+}
+
+// ─── TEMPLATE ────────────────────────────────────────────────
+model Template {
+  id              String           @id @default(uuid())
+  hotelId         String           @map("hotel_id")
+  metaTemplateId  String?          @map("wa_template_id")
+  name            String
+  displayName     String?          @map("display_name")
+  category        TemplateCategory @default(UTILITY)
+  language        String           @default("en_US")
+  status          TemplateStatus   @default(DRAFT)
+  rejectionReason String?          @map("rejection_reason")
+  headerType      HeaderType       @default(NONE) @map("header_type")
+  headerText      String?          @map("header_text")
+  headerMediaUrl  String?          @map("header_media_url")
+  bodyText        String           @db.Text @map("body_text")
+  footerText      String?          @map("footer_text")
+  variables       Json?
+  buttons         Json?
+  components      Json?            @map("components_raw")
+  previewData     Json?            @map("preview_data")
+  syncedAt        DateTime?        @map("synced_at")
+  deletedAt       DateTime?        @map("deleted_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  hotel           Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  campaigns       Campaign[]
+  messages        Message[]
+  automationRules AutomationRule[]
+
+  @@unique([name, hotelId])
+  @@index([hotelId])
+  @@index([status])
+  @@map("templates")
+}
+
+enum TemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum TemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  PAUSED
+  DISABLED
+}
+
+enum HeaderType {
+  NONE
+  TEXT
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+// ─── CAMPAIGN ────────────────────────────────────────────────
+model Campaign {
+  id               String           @id @default(uuid())
+  hotelId          String           @map("hotel_id")
+  templateId       String           @map("template_id")
+  createdById      String           @map("created_by")
+  name             String
+  description      String?          @db.Text
+  audienceType     AudienceType     @map("audience_type")
+  audienceFilter   Json?            @map("audience_filter")
+  variableValues   Json?            @map("variable_values")
+  scheduledAt      DateTime?        @map("scheduled_at")
+  startedAt        DateTime?        @map("started_at")
+  completedAt      DateTime?        @map("completed_at")
+  status           CampaignStatus   @default(DRAFT)
+  totalRecipients  Int              @default(0) @map("total_recipients")
+  sentCount        Int              @default(0) @map("sent_count")
+  deliveredCount   Int              @default(0) @map("delivered_count")
+  readCount        Int              @default(0) @map("read_count")
+  failedCount      Int              @default(0) @map("failed_count")
+  skippedCount     Int              @default(0) @map("skipped_count")
+  bullJobId        String?          @map("bull_job_id")
+  deletedAt        DateTime?        @map("deleted_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  hotel            Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  template         Template         @relation(fields: [templateId], references: [id])
+  creator          User             @relation(fields: [createdById], references: [id])
+  recipients       CampaignRecipient[]
+  messages         Message[]
+
+  @@index([hotelId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("campaigns")
+}
+
+enum AudienceType {
+  ARRIVING    @map("arriving")
+  IN_HOUSE    @map("in_house")
+  CHECKED_OUT @map("checked_out")
+  ALL         @map("all")
+  TAG         @map("tag")
+  CSV         @map("csv")
+}
+
+enum CampaignStatus {
+  DRAFT     @map("draft")
+  SCHEDULED @map("scheduled")
+  RUNNING   @map("running")
+  COMPLETED @map("completed")
+  CANCELLED @map("cancelled")
+  FAILED    @map("failed")
+}
+
+model CampaignRecipient {
+  id             String          @id @default(uuid())
+  campaignId     String          @map("campaign_id")
+  guestId        String          @map("guest_id")
+  phone          String
+  variableValues Json?           @map("variable_values")
+  waMessageId    String?         @map("wa_message_id")
+  status         RecipientStatus @default(PENDING)
+  errorCode      String?         @map("error_code")
+  errorMessage   String?         @map("error_message") @db.VarChar(500)
+  retryCount     Int             @default(0) @map("retry_count")
+  sentAt         DateTime?       @map("sent_at")
+  deliveredAt    DateTime?       @map("delivered_at")
+  readAt         DateTime?       @map("read_at")
+  failedAt       DateTime?       @map("failed_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  campaign       Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  guest          Guest           @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, guestId])
+  @@index([status])
+  @@index([waMessageId])
+  @@map("campaign_recipients")
+}
+
+enum RecipientStatus {
+  PENDING   @map("pending")
+  SENT      @map("sent")
+  DELIVERED @map("delivered")
+  READ      @map("read")
+  FAILED    @map("failed")
+  SKIPPED   @map("skipped")
+}
+
+// ─── CONVERSATION ────────────────────────────────────────────
+model Conversation {
+  id               String             @id @default(uuid())
+  hotelId          String             @map("hotel_id")
+  guestId          String             @map("guest_id")
+  assignedAgentId  String?            @map("assigned_agent_id")
+  status           ConversationStatus @default(OPEN)
+  channel          String             @default("whatsapp")
+  lastMessage      String?            @db.Text @map("last_message")
+  lastMessageAt    DateTime?          @map("last_message_at")
+  lastMessageType  String?            @map("last_message_type")
+  unreadCount      Int                @default(0) @map("unread_count")
+  resolvedAt       DateTime?          @map("resolved_at")
+  resolvedBy       String?            @map("resolved_by")
+  tags             Json?
+  deletedAt        DateTime?          @map("deleted_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  hotel            Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  guest            Guest              @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  assignedAgent    User?              @relation("AgentConversations", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  messages         Message[]
+
+  @@unique([guestId, hotelId])
+  @@index([hotelId])
+  @@index([status])
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+enum ConversationStatus {
+  OPEN     @map("open")
+  PENDING  @map("pending")
+  RESOLVED @map("resolved")
+  ARCHIVED @map("archived")
+}
+
+// ─── MESSAGE ─────────────────────────────────────────────────
+model Message {
+  id             String        @id @default(uuid())
+  conversationId String        @map("conversation_id")
+  hotelId        String        @map("hotel_id")
+  waMessageId    String?       @unique @map("wa_message_id")
+  direction      Direction
+  type           MessageType   @default(TEXT)
+  body           String?       @db.Text
+  mediaUrl       String?       @map("media_url") @db.VarChar(1000)
+  mediaId        String?       @map("media_id")
+  mediaMimeType  String?       @map("media_mime_type")
+  mediaFilename  String?       @map("media_filename")
+  mediaCaption   String?       @map("media_caption") @db.Text
+  templateId     String?       @map("template_id")
+  campaignId     String?       @map("campaign_id")
+  templateVars   Json?         @map("template_vars")
+  status         MessageStatus @default(PENDING)
+  errorCode      String?       @map("error_code")
+  errorMessage   String?       @map("error_message") @db.VarChar(500)
+  sentAt         DateTime?     @map("sent_at")
+  deliveredAt    DateTime?     @map("delivered_at")
+  readAt         DateTime?     @map("read_at")
+  failedAt       DateTime?     @map("failed_at")
+  contextMsgId   String?       @map("context_msg_id")
+  senderId       String?       @map("sender_id")
+  metadata       Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  hotel          Hotel         @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  template       Template?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  campaign       Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  sender         User?         @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  automationLog  AutomationLog?
+
+  @@index([conversationId])
+  @@index([hotelId])
+  @@index([status])
+  @@index([campaignId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+enum Direction {
+  INBOUND  @map("inbound")
+  OUTBOUND @map("outbound")
+}
+
+enum MessageType {
+  TEXT        @map("text")
+  IMAGE       @map("image")
+  DOCUMENT    @map("document")
+  AUDIO       @map("audio")
+  VIDEO       @map("video")
+  TEMPLATE    @map("template")
+  LOCATION    @map("location")
+  INTERACTIVE @map("interactive")
+  STICKER     @map("sticker")
+  REACTION    @map("reaction")
+  UNKNOWN     @map("unknown")
+}
+
+enum MessageStatus {
+  PENDING   @map("pending")
+  SENT      @map("sent")
+  DELIVERED @map("delivered")
+  READ      @map("read")
+  FAILED    @map("failed")
+  DELETED   @map("deleted")
+}
+
+// ─── AUTOMATION ──────────────────────────────────────────────
+model AutomationRule {
+  id                      String        @id @default(uuid())
+  hotelId                 String        @map("hotel_id")
+  templateId              String        @map("template_id")
+  createdById             String        @map("created_by")
+  name                    String
+  description             String?       @db.Text
+  triggerType             TriggerType   @map("trigger_type")
+  triggerOffsetHours      Int           @default(0) @map("trigger_offset_hours")
+  triggerOffsetDirection  OffsetDir     @default(AFTER) @map("trigger_offset_direction")
+  sendTime                String?       @map("send_time") @db.VarChar(8)
+  audienceType            AudienceType  @default(ALL) @map("audience_type")
+  audienceFilter          Json?         @map("audience_filter")
+  variableValues          Json?         @map("variable_values")
+  conditions              Json?
+  isActive                Boolean       @default(true) @map("is_active")
+  runCount                Int           @default(0) @map("run_count")
+  lastRunAt               DateTime?     @map("last_run_at")
+  deletedAt               DateTime?     @map("deleted_at")
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
+
+  hotel       Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  template    Template        @relation(fields: [templateId], references: [id])
+  creator     User            @relation(fields: [createdById], references: [id])
+  logs        AutomationLog[]
+
+  @@index([hotelId])
+  @@index([triggerType, isActive])
+  @@map("automation_rules")
+}
+
+enum TriggerType {
+  BEFORE_ARRIVAL  @map("before_arrival")
+  AFTER_CHECKIN   @map("after_checkin")
+  DURING_STAY     @map("during_stay")
+  BEFORE_CHECKOUT @map("before_checkout")
+  AFTER_CHECKOUT  @map("after_checkout")
+  CUSTOM_DATE     @map("custom_date")
+}
+
+enum OffsetDir {
+  BEFORE @map("before")
+  AFTER  @map("after")
+}
+
+model AutomationLog {
+  id          String      @id @default(uuid())
+  ruleId      String      @map("rule_id")
+  hotelId     String      @map("hotel_id")
+  guestId     String      @map("guest_id")
+  messageId   String?     @unique @map("message_id")
+  status      LogStatus
+  error       String?     @db.Text
+  metadata    Json?
+  executedAt  DateTime    @default(now()) @map("executed_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  rule        AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  hotel       Hotel          @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  guest       Guest          @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  message     Message?       @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([ruleId])
+  @@index([hotelId])
+  @@index([executedAt])
+  @@map("automation_logs")
+}
+
+enum LogStatus {
+  SUCCESS @map("success")
+  SKIPPED @map("skipped")
+  FAILED  @map("failed")
+}
+
+// ─── LOG ─────────────────────────────────────────────────────
+model Log {
+  id         BigInt   @id @default(autoincrement())
+  hotelId    String?  @map("hotel_id")
+  userId     String?  @map("user_id")
+  type       LogType  @default(SYSTEM)
+  level      LogLevel @default(INFO)
+  message    String   @db.Text
+  context    Json?
+  requestId  String?  @map("request_id")
+  ip         String?
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  durationMs Int?     @map("duration_ms")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  hotel      Hotel?   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@index([type, level])
+  @@index([createdAt])
+  @@map("logs")
+}
+enum LogType {
+  API        @map("api")
+  ERROR      @map("error")
+  MESSAGE    @map("message")
+  CAMPAIGN   @map("campaign")
+  AUTOMATION @map("automation")
+  TOKEN      @map("token")
+  SYSTEM     @map("system")
+}
+
+enum LogLevel {
+  DEBUG @map("debug")
+  INFO  @map("info")
+  WARN  @map("warn")
+  ERROR @map("error")
+  FATAL @map("fatal")
+}

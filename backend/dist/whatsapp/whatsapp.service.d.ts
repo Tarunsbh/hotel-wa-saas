@@ -1,0 +1,51 @@
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
+export declare class WhatsAppService {
+    private config;
+    private prisma;
+    private readonly logger;
+    private readonly graphBase;
+    private readonly apiVersion;
+    private readonly encryptionKey;
+    constructor(config: ConfigService, prisma: PrismaService);
+    encryptToken(token: string): string;
+    decryptToken(encrypted: string): string;
+    getActiveToken(hotelId: string): Promise<{
+        token: string;
+        source: 'db' | 'env';
+        tokenId?: string;
+    }>;
+    private buildClientWithToken;
+    private buildClient;
+    private isAuthError;
+    private requestWithFallback;
+    sendText(hotelId: string, phoneNumberId: string, to: string, body: string): Promise<string>;
+    sendTemplate(hotelId: string, phoneNumberId: string, to: string, templateName: string, languageCode: string, components?: any[]): Promise<string>;
+    sendMedia(hotelId: string, phoneNumberId: string, to: string, type: 'image' | 'document' | 'audio' | 'video', link: string, caption?: string, filename?: string): Promise<string>;
+    markRead(hotelId: string, phoneNumberId: string, waMessageId: string): Promise<void>;
+    fetchTemplatesFromMeta(hotelId: string, wabaId: string): Promise<any[]>;
+    createTemplateOnMeta(hotelId: string, wabaId: string, payload: any): Promise<any>;
+    deleteTemplateOnMeta(hotelId: string, wabaId: string, name: string): Promise<void>;
+    storeToken(hotelId: string, token: string, expiresAt?: Date): Promise<{
+        id: string;
+        tokenType: import(".prisma/client").$Enums.TokenType;
+        tokenValue: string;
+        tokenHash: string;
+        appId: string | null;
+        scopes: import("@prisma/client/runtime/library").JsonValue | null;
+        expiresAt: Date | null;
+        refreshAt: Date | null;
+        isActive: boolean;
+        refreshCount: number;
+        lastRefreshed: Date | null;
+        lastUsedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        hotelId: string;
+    }>;
+    validateToken(token: string): Promise<void>;
+    refreshToken(token: string): Promise<any>;
+    debugToken(hotelId: string, token: string): Promise<any>;
+    buildTemplateComponents(variables: string[], bodyText: string): any[];
+    validatePhone(phone: string): string;
+}
