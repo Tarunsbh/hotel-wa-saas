@@ -8,6 +8,9 @@ RUN VITE_API_URL=$VITE_API_URL npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy as a template; envsubst will render it at container start
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# nginx:alpine's docker-entrypoint.sh automatically runs envsubst on
+# /etc/nginx/templates/*.template → /etc/nginx/conf.d/ before starting nginx
+CMD ["/docker-entrypoint.sh", "nginx", "-g", "daemon off;"]
