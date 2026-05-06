@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Edit2, Trash2, Play, ToggleLeft, ToggleRight,
-  X, Loader2, Check, Zap, Clock,
+  X, Loader2, Check, Zap, Clock, ChevronDown, ChevronUp,
+  CheckCircle2, XCircle, AlertCircle, BarChart2,
 } from 'lucide-react';
 import { automation, templates } from '../api/index.js';
 import { format } from 'date-fns';
@@ -350,6 +351,74 @@ function RuleModal({ rule, onClose, onSaved }) {
   );
 }
 
+// ─── Logs Panel ──────────────────────────────────────────────────────────────
+function LogsPanel({ ruleId, onClose }) {
+  const [data, setData]     = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    automation.getLogs(ruleId)
+      .then((res) => setData(res.data))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [ruleId]);
+
+  const logs  = data?.logs  || [];
+  const stats = data?.stats || {};
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-40 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-2xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+          <div>
+            <h3 className="font-semibold text-gray-800">Execution Logs</h3>
+            {stats.total > 0 && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                {stats.total} total · {' '}
+                <span className="text-green-600">{stats.success} success</span> · {' '}
+                <span className="text-red-500">{stats.failed} failed</span>
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 p-4 space-y-2">
+          {loading && (
+            <div className="flex justify-center py-8">
+              <Loader2 size={22} className="animate-spin text-[#25D366]" />
+            </div>
+          )}
+          {!loading && logs.length === 0 && (
+            <div className="py-12 text-center text-gray-400 text-sm">No executions yet</div>
+          )}
+          {logs.map((log) => (
+            <div key={log.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+              {log.status === 'SUCCESS'
+                ? <CheckCircle2 size={16} className="text-green-500 mt-0.5 shrink-0" />
+                : <XCircle     size={16} className="text-red-500 mt-0.5 shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800">
+                  {log.guest?.name || log.guest?.phone || 'Unknown Guest'}
+                  {log.guest?.phone && log.guest?.name && (
+                    <span className="ml-1 text-xs text-gray-400 font-normal">{log.guest.phone}</span>
+                  )}
+                </p>
+                {log.error && <p className="text-xs text-red-600 mt-0.5">{log.error}</p>}
+              </div>
+              <span className="text-xs text-gray-400 shrink-0">
+                {log.createdAt ? format(new Date(log.createdAt), 'MMM dd HH:mm') : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function AutomationPage() {
   const [rules, setRules]       = useState([]);
@@ -357,6 +426,7 @@ export default function AutomationPage() {
   const [modal, setModal]       = useState(null);   // null | 'add' | rule object
   const [toast, setToast]       = useState(null);
   const [runningId, setRunningId] = useState(null);
+  const [logsRuleId, setLogsRuleId] = useState(null);
 
   const showToast = (msg, type = 'success') => setToast({ msg, type });
 
@@ -391,8 +461,13 @@ export default function AutomationPage() {
   const handleRunNow = async (id) => {
     setRunningId(id);
     try {
-      await automation.runNow(id);
-      showToast('Rule triggered manually');
+      const res    = await automation.runNow(id);
+      const result = res.data || {};
+      const { sent = 0, failed = 0, skipped = 0 } = result;
+      showToast(
+        `Done: ${sent} sent${skipped > 0 ? `, ${skipped} already sent today` : ''}${failed > 0 ? `, ${failed} failed` : ''}`,
+        failed > 0 ? 'error' : 'success',
+      );
       loadRules();
     } catch (e) {
       showToast(e.response?.data?.message || 'Failed to run rule', 'error');
@@ -425,6 +500,9 @@ export default function AutomationPage() {
           onClose={() => setModal(null)}
           onSaved={(msg) => { showToast(msg); loadRules(); }}
         />
+      )}
+      {logsRuleId && (
+        <LogsPanel ruleId={logsRuleId} onClose={() => setLogsRuleId(null)} />
       )}
 
       {/* Header */}
@@ -532,12 +610,19 @@ export default function AutomationPage() {
                       )}
                     </div>
 
-                    {/* Last run */}
-                    {rule.lastRunAt && (
-                      <p className="text-xs text-gray-400 mt-1.5">
-                        Last run: {format(new Date(rule.lastRunAt), 'MMM dd, yyyy HH:mm')}
-                      </p>
-                    )}
+                    {/* Last run + execution count */}
+                    <div className="flex items-center gap-3 mt-1.5">
+                      {rule.lastRunAt && (
+                        <p className="text-xs text-gray-400">
+                          Last run: {format(new Date(rule.lastRunAt), 'MMM dd, HH:mm')}
+                        </p>
+                      )}
+                      {rule.runCount > 0 && (
+                        <span className="text-xs text-gray-400">
+                          {rule.runCount} execution{rule.runCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -552,6 +637,13 @@ export default function AutomationPage() {
                     {runningId === rule.id
                       ? <Loader2 size={16} className="animate-spin" />
                       : <Play size={16} />}
+                  </button>
+                  <button
+                    onClick={() => setLogsRuleId(rule.id)}
+                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    title="View logs"
+                  >
+                    <BarChart2 size={16} />
                   </button>
                   <button
                     onClick={() => setModal(rule)}

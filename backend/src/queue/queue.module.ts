@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { MessageProcessor } from './message.processor';
 import { CampaignProcessor } from './campaign.processor';
 import { TokenRefreshProcessor } from './token-refresh.processor';
+import { AutomationProcessor } from './automation.processor';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { TokenRefreshProcessor } from './token-refresh.processor';
       { name: 'token-refresh' },
     ),
   ],
-  providers: [MessageProcessor, CampaignProcessor, TokenRefreshProcessor],
+  providers: [MessageProcessor, CampaignProcessor, TokenRefreshProcessor, AutomationProcessor],
   exports: [BullModule],
 })
 export class QueueModule {}

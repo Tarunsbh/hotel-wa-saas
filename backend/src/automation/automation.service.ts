@@ -142,9 +142,36 @@ export class AutomationService {
     });
   }
 
+  /** Recent execution logs for a rule (last 50) */
+  async getLogs(hotelId: string, ruleId: string, limit = 50) {
+    await this.findOne(hotelId, ruleId);
+
+    const logs = await this.prisma.automationLog.findMany({
+      where: { ruleId, hotelId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        guest: { select: { id: true, name: true, phone: true } },
+      },
+    });
+
+    const total   = await this.prisma.automationLog.count({ where: { ruleId, hotelId } });
+    const success = await this.prisma.automationLog.count({ where: { ruleId, hotelId, status: 'SUCCESS' } });
+    const failed  = await this.prisma.automationLog.count({ where: { ruleId, hotelId, status: 'FAILED' } });
+
+    return { logs, stats: { total, success, failed } };
+  }
+
+  /**
+   * Manual "Run Now" execution — sends to all matching audience guests.
+   * Deduplicates: skips guests who already received this rule today.
+   * Called directly from the controller (not via queue) so the HTTP caller
+   * gets an immediate result.
+   */
   async runRule(ruleId: string): Promise<{
     sent: number;
     failed: number;
+    skipped: number;
     errors: string[];
   }> {
     const rule = await this.prisma.automationRule.findUnique({
@@ -152,16 +179,10 @@ export class AutomationService {
       include: { template: true },
     });
 
-    if (!rule) {
-      throw new NotFoundException(`Rule ${ruleId} not found`);
-    }
+    if (!rule) throw new NotFoundException(`Rule ${ruleId} not found`);
 
     if (!rule.template || rule.template.status !== 'APPROVED') {
-      return {
-        sent: 0,
-        failed: 0,
-        errors: ['Template not approved'],
-      };
+      return { sent: 0, failed: 0, skipped: 0, errors: ['Template not approved'] };
     }
 
     const hotel = await this.prisma.hotel.findUnique({
@@ -170,7 +191,7 @@ export class AutomationService {
     });
 
     if (!hotel?.phoneNumberId) {
-      return { sent: 0, failed: 0, errors: ['Hotel has no phoneNumberId'] };
+      return { sent: 0, failed: 0, skipped: 0, errors: ['Hotel has no phoneNumberId'] };
     }
 
     const guests = await this.buildRuleAudience(
@@ -179,18 +200,35 @@ export class AutomationService {
       rule.audienceFilter as any,
     );
 
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const sendComponents = this.buildSendComponents(
+      rule.variableValues as Record<string, string> | null,
+    );
+
     let sent = 0;
     let failed = 0;
+    let skipped = 0;
     const errors: string[] = [];
 
     for (const guest of guests) {
-      try {
-        // Build runtime send-components from variableValues (NOT the stored template structure).
-        // Meta API expects body/header parameters at send time, not the full template definition.
-        const sendComponents = this.buildSendComponents(
-          rule.variableValues as Record<string, string> | null,
-        );
+      // Per-guest deduplication
+      const alreadyRan = await this.prisma.automationLog.findFirst({
+        where: {
+          ruleId,
+          guestId:   guest.id,
+          status:    'SUCCESS',
+          createdAt: { gte: todayStart },
+        },
+      });
 
+      if (alreadyRan) {
+        skipped++;
+        continue;
+      }
+
+      try {
         const result = await this.whatsappService.sendTemplate(
           rule.hotelId,
           hotel.phoneNumberId,
@@ -203,9 +241,9 @@ export class AutomationService {
         await this.prisma.automationLog.create({
           data: {
             ruleId,
-            hotelId: rule.hotelId,
-            guestId: guest.id,
-            status: 'SUCCESS',
+            hotelId:  rule.hotelId,
+            guestId:  guest.id,
+            status:   'SUCCESS',
             metadata: { waMessageId: result } as any,
           },
         });
@@ -220,8 +258,8 @@ export class AutomationService {
             ruleId,
             hotelId: rule.hotelId,
             guestId: guest.id,
-            status: 'FAILED',
-            error: e.message,
+            status:  'FAILED',
+            error:   e.message,
           },
         });
       }
@@ -229,50 +267,152 @@ export class AutomationService {
 
     await this.prisma.automationRule.update({
       where: { id: ruleId },
-      data: {
-        lastRunAt: new Date(),
-        runCount: { increment: 1 },
-      },
+      data:  { lastRunAt: new Date(), runCount: { increment: 1 } },
     });
 
-    this.logger.log(
-      `Rule ${ruleId} executed: ${sent} sent, ${failed} failed`,
-    );
-
-    return { sent, failed, errors };
+    this.logger.log(`Rule ${ruleId}: ${sent} sent, ${failed} failed, ${skipped} skipped`);
+    return { sent, failed, skipped, errors };
   }
 
+  /**
+   * Every minute: evaluate which automation rules are due and queue them.
+   *
+   * CUSTOM_DATE rules  — fire once per day at the configured sendTime.
+   *   Due = sendTime matches the current HH:MM AND not already run today.
+   *
+   * Stay-event rules (BEFORE_ARRIVAL / AFTER_CHECKIN / BEFORE_CHECKOUT /
+   *   AFTER_CHECKOUT / DURING_STAY) are triggered by guest stay-status changes.
+   *   As a catch-up, this cron also scans guests updated in the last 2 minutes.
+   */
   @Cron(CronExpression.EVERY_MINUTE)
   async runAllDueRules() {
-    const now = new Date();
+    const now        = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
 
-    const rules = await this.prisma.automationRule.findMany({
-      where: {
-        isActive: true,
-        deletedAt: null,
-        triggerType: 'CUSTOM_DATE',
-        lastRunAt: null,
-      },
+    // ── CUSTOM_DATE: fire once per day at sendTime ───────────────────────
+    const customRules = await this.prisma.automationRule.findMany({
+      where: { isActive: true, deletedAt: null, triggerType: 'CUSTOM_DATE' },
     });
 
-    for (const rule of rules) {
-      try {
-        await this.automationQueue.add(
-          'run-rule',
-          { ruleId: rule.id },
-          {
-            attempts: 2,
-            backoff: { type: 'fixed', delay: 10000 },
-            removeOnComplete: true,
-          },
-        );
-      } catch (e) {
-        this.logger.error(`Failed to queue rule ${rule.id}: ${e.message}`);
+    const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    let queued = 0;
+    for (const rule of customRules) {
+      const sendTime        = rule.sendTime || '00:00';
+      const alreadyRunToday = rule.lastRunAt && rule.lastRunAt >= todayStart;
+
+      if (sendTime === currentHHMM && !alreadyRunToday) {
+        try {
+          await this.automationQueue.add(
+            'run-rule',
+            { ruleId: rule.id },
+            { attempts: 2, backoff: { type: 'fixed', delay: 10_000 }, removeOnComplete: true },
+          );
+          queued++;
+        } catch (e) {
+          this.logger.error(`Failed to queue CUSTOM_DATE rule ${rule.id}: ${e.message}`);
+        }
       }
     }
 
-    if (rules.length > 0) {
-      this.logger.log(`Queued ${rules.length} automation rules`);
+    // ── Stay-event catch-up: guests whose stayStatus changed in last 2 min ─
+    const twoMinsAgo   = new Date(now.getTime() - 2 * 60 * 1_000);
+    const recentGuests = await this.prisma.guest.findMany({
+      where: {
+        updatedAt:  { gte: twoMinsAgo },
+        deletedAt:  null,
+        optIn:      true,
+        stayStatus: { not: 'NO_STAY' as any },
+      },
+      select: { id: true, hotelId: true, stayStatus: true },
+    });
+
+    for (const guest of recentGuests) {
+      await this.runStayEventRulesForGuest(
+        guest.id,
+        guest.hotelId,
+        String(guest.stayStatus),
+      ).catch((e) =>
+        this.logger.error(`Stay-event check failed for guest ${guest.id}: ${e.message}`),
+      );
+    }
+
+    if (queued > 0) {
+      this.logger.log(`Queued ${queued} CUSTOM_DATE automation rules at ${currentHHMM}`);
+    }
+  }
+
+  /**
+   * Fire all active stay-event rules matching a guest's current stay status.
+   * Called from cron catch-up and from the guest update/webhook flow.
+   *
+   * Trigger mapping:
+   *   ARRIVING    → BEFORE_ARRIVAL
+   *   IN_HOUSE    → AFTER_CHECKIN, DURING_STAY
+   *   CHECKED_OUT → BEFORE_CHECKOUT, AFTER_CHECKOUT
+   */
+  async runStayEventRulesForGuest(
+    guestId: string,
+    hotelId: string,
+    stayStatus: string,
+  ): Promise<void> {
+    const triggerMap: Record<string, string[]> = {
+      ARRIVING:    ['BEFORE_ARRIVAL'],
+      IN_HOUSE:    ['AFTER_CHECKIN', 'DURING_STAY'],
+      CHECKED_OUT: ['BEFORE_CHECKOUT', 'AFTER_CHECKOUT'],
+    };
+
+    const triggerTypes = triggerMap[stayStatus];
+    if (!triggerTypes || triggerTypes.length === 0) return;
+
+    const rules = await this.prisma.automationRule.findMany({
+      where: {
+        hotelId,
+        isActive:    true,
+        deletedAt:   null,
+        triggerType: { in: triggerTypes as any[] },
+      },
+    });
+
+    if (rules.length === 0) return;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    for (const rule of rules) {
+      // Deduplicate: skip if this rule already succeeded for this guest today
+      const alreadyRan = await this.prisma.automationLog.findFirst({
+        where: {
+          ruleId:    rule.id,
+          guestId,
+          status:    'SUCCESS',
+          createdAt: { gte: todayStart },
+        },
+      });
+      if (alreadyRan) {
+        this.logger.debug(`Rule ${rule.id} already ran for guest ${guestId} today — skipping`);
+        continue;
+      }
+
+      const delayMs = (rule.triggerOffsetHours || 0) * 60 * 60 * 1_000;
+
+      await this.automationQueue.add(
+        'run-rule-for-guest',
+        { ruleId: rule.id, guestId },
+        {
+          attempts:         2,
+          backoff:          { type: 'fixed', delay: 10_000 },
+          delay:            delayMs,
+          removeOnComplete: true,
+        },
+      ).catch((e) =>
+        this.logger.error(`Failed to queue stay-event rule ${rule.id} for guest ${guestId}: ${e.message}`),
+      );
+
+      this.logger.log(
+        `Queued stay-event rule "${rule.name}" for guest ${guestId} (delay: ${delayMs / 60_000}min)`,
+      );
     }
   }
 

@@ -125,4 +125,10 @@ export class CampaignsController {
   getStats(@Request() req: any, @Param('id') id: string) {
     return this.campaignsService.getStats(req.user.hotelId, id);
   }
+
+  @Get('analytics/summary')
+  @ApiOperation({ summary: 'Get aggregate campaign analytics for dashboard' })
+  getAnalytics(@Request() req: any) {
+    return this.campaignsService.getAnalytics(req.user.hotelId);
+  }
 }

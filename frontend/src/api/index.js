@@ -166,6 +166,7 @@ export const campaigns = {
   cancel: (id) => api.post(`/campaigns/${id}/cancel`),
   getRecipients: (id, params) => api.get(`/campaigns/${id}/recipients`, { params }),
   getStats: (id) => api.get(`/campaigns/${id}/stats`),
+  getAnalytics: () => api.get('/campaigns/analytics/summary'),
 };
 
 // ─── Conversations ────────────────────────────────────────────────────────────
@@ -206,6 +207,7 @@ export const automation = {
   deleteRule: (id) => api.delete(`/automation/rules/${id}`),
   toggleRule: (id, active) => api.patch(`/automation/rules/${id}/toggle`, { active }),
   runNow: (id) => api.post(`/automation/rules/${id}/run-now`),
+  getLogs: (id) => api.get(`/automation/rules/${id}/logs`),
 };
 
 // ─── Analytics ────────────────────────────────────────────────────────────────

@@ -3,7 +3,9 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
@@ -11,20 +13,42 @@ import * as csv from 'csv-parse/sync';
 
 @Injectable()
 export class GuestsService {
+  private readonly logger = new Logger(GuestsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   private validateE164(phone: string): boolean {
     return /^\+[1-9]\d{1,14}$/.test(phone);
   }
 
-  private toGuestData(dto: CreateGuestDto | UpdateGuestDto) {
-    const { status, externalId, ...rest } = dto as any;
+  /** Convert a date string like '2026-07-05' to a proper Date object for Prisma. */
+  private parseDate(value?: string | null): Date | undefined {
+    if (!value) return undefined;
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? undefined : d;
+  }
 
-    return {
+  private toGuestData(dto: CreateGuestDto | UpdateGuestDto) {
+    const { status, externalId, checkInDate, checkOutDate, ...rest } = dto as any;
+
+    // Build the clean data object — omit undefined values so Prisma doesn't
+    // try to write NULL for unset optional fields, and convert date strings
+    // to Date objects so MySQL's @db.Date binding never receives a raw string.
+    const data: Record<string, any> = {
       ...rest,
-      stayStatus: this.normalizeStayStatus(status),
-      pmsGuestId: externalId,
+      stayStatus: this.normalizeStayStatus(status) ?? undefined,
+      pmsGuestId: externalId ?? undefined,
     };
+
+    const ciDate = this.parseDate(checkInDate);
+    const coDate = this.parseDate(checkOutDate);
+    if (ciDate !== undefined) data.checkInDate  = ciDate;
+    if (coDate !== undefined) data.checkOutDate = coDate;
+
+    // Strip any keys whose value is undefined so Prisma doesn't include them
+    return Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined),
+    );
   }
 
   private normalizeStayStatus(status?: string) {
@@ -35,6 +59,31 @@ export class GuestsService {
     if (normalized === 'CHECKED_IN') return 'IN_HOUSE';
     if (normalized === 'INACTIVE') return 'NO_STAY';
     return normalized;
+  }
+
+  /** Map a Prisma error to a meaningful HTTP exception. */
+  private handlePrismaError(e: unknown, phone?: string): never {
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === 'P2002') {
+        throw new ConflictException(
+          phone
+            ? `A guest with phone ${phone} already exists`
+            : 'A guest with this phone number already exists',
+        );
+      }
+      if (e.code === 'P2025') {
+        throw new NotFoundException('Guest not found');
+      }
+      this.logger.error(`Prisma error ${e.code}: ${e.message}`);
+      throw new BadRequestException(`Database error: ${e.code}`);
+    }
+    if (e instanceof Prisma.PrismaClientValidationError) {
+      this.logger.error(`Prisma validation error: ${e.message}`);
+      throw new BadRequestException(
+        'Invalid guest data — please check all fields and try again',
+      );
+    }
+    throw e; // re-throw unknown errors
   }
 
   async findAll(
@@ -132,22 +181,37 @@ export class GuestsService {
       );
     }
 
+    // Check for active guest AND also soft-deleted guest (unique constraint
+    // on [phone, hotelId] doesn't filter by deletedAt, so a soft-deleted
+    // guest with the same phone would still trigger P2002).
     const existing = await this.prisma.guest.findFirst({
-      where: { hotelId, phone: dto.phone, deletedAt: null },
+      where: { hotelId, phone: dto.phone },
     });
 
     if (existing) {
-      throw new ConflictException(
-        `Guest with phone ${dto.phone} already exists`,
-      );
+      if (!existing.deletedAt) {
+        throw new ConflictException(
+          `A guest with phone ${dto.phone} already exists`,
+        );
+      }
+      // Soft-deleted guest with same phone — restore and update instead
+      const { hotelId: _hid, ...restoreData } = this.toGuestData(dto) as any;
+      return this.prisma.guest.update({
+        where: { id: existing.id },
+        data: { ...restoreData, deletedAt: null },
+      });
     }
 
-    return this.prisma.guest.create({
-      data: {
-        ...this.toGuestData(dto),
-        hotelId,
-      },
-    });
+    try {
+      return await this.prisma.guest.create({
+        data: {
+          ...(this.toGuestData(dto) as any),
+          hotelId,
+        },
+      });
+    } catch (e) {
+      this.handlePrismaError(e, dto.phone);
+    }
   }
 
   async update(hotelId: string, id: string, dto: UpdateGuestDto) {
@@ -169,10 +233,14 @@ export class GuestsService {
       }
     }
 
-    return this.prisma.guest.update({
-      where: { id },
-      data: this.toGuestData(dto),
-    });
+    try {
+      return await this.prisma.guest.update({
+        where: { id },
+        data: this.toGuestData(dto),
+      });
+    } catch (e) {
+      this.handlePrismaError(e, dto.phone);
+    }
   }
 
   async softDelete(hotelId: string, id: string) {

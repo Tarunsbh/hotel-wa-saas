@@ -85,4 +85,11 @@ export class AutomationController {
     await this.automationService.findOne(req.user.hotelId, id);
     return this.automationService.runRule(id);
   }
+
+  @Get(':id/logs')
+  @ApiOperation({ summary: 'Get execution logs for an automation rule' })
+  @ApiParam({ name: 'id', type: 'string' })
+  getLogs(@Request() req: any, @Param('id') id: string) {
+    return this.automationService.getLogs(req.user.hotelId, id);
+  }
 }
