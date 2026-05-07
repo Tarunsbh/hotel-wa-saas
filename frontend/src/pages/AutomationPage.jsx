@@ -58,7 +58,7 @@ function extractVarKeys(bodyText = '') {
 function Toast({ msg, type, onClose }) {
   useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div className={`fixed top-4 right-4 z-[60] flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-sm font-medium border max-w-sm
+    <div className={`fixed top-[72px] right-4 z-[60] flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-sm font-medium border max-w-[calc(100vw-2rem)]
       ${type === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
       {type === 'error' ? <AlertCircle size={14} className="text-red-500" /> : <Check size={14} className="text-emerald-500" />}
       {msg}

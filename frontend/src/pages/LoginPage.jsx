@@ -42,7 +42,7 @@ export default function LoginPage() {
   const inputCls = 'w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 text-gray-800 placeholder-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#25D366]/30 focus:border-[#25D366] transition-all';
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-dvh flex">
 
       {/* ── Left panel (branding) — hidden on mobile ──────── */}
       <div className="hidden lg:flex flex-col w-[52%] bg-[#0F1623] relative overflow-hidden p-12 text-white">

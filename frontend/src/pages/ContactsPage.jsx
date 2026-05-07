@@ -15,7 +15,7 @@ function Toast({ message, type, onClose }) {
     return () => clearTimeout(t);
   }, [onClose]);
   return (
-    <div className={`fixed top-4 right-4 z-[60] flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-sm font-medium max-w-sm border backdrop-blur-sm animate-in slide-in-from-top-2
+    <div className={`fixed top-[72px] right-4 z-[60] flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-sm font-medium max-w-[calc(100vw-2rem)] border backdrop-blur-sm animate-in slide-in-from-top-2
       ${type === 'success'
         ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
         : 'bg-red-50 text-red-800 border-red-100'
@@ -936,8 +936,8 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Mobile CSV import FAB */}
-      <div className="md:hidden fixed bottom-20 right-4 z-30">
+      {/* Mobile CSV import FAB — bottom-[88px] clears the bottom nav (52px) + iPhone home indicator (34px) + buffer */}
+      <div className="md:hidden fixed right-4 z-30" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)' }}>
         <label className={`flex items-center gap-1.5 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-2xl text-xs font-semibold shadow-lg cursor-pointer transition-all active:scale-95 ${importing ? 'opacity-50 pointer-events-none' : ''}`}>
           {importing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
           Import CSV

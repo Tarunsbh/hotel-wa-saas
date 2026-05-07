@@ -2,29 +2,172 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Base resets ──────────────────────────────────────────────────────────── */
 @layer base {
-  * {
+  *,
+  *::before,
+  *::after {
     box-sizing: border-box;
   }
+
+  html {
+    /* Prevent horizontal scroll globally */
+    overflow-x: hidden;
+    /* Full height so body/root can inherit */
+    height: 100%;
+    /* Use svh so the app never undershoots on mobile Safari
+       (svh = "small viewport height" = viewport with all browser chrome shown) */
+    height: 100svh;
+    /* Suppress text-size adjustment on orientation change (iOS) */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Prevent overscroll bounce on the document itself */
+    overscroll-behavior: none;
+  }
+
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background-color: #f0f2f5;
+    /* Inherit full height from html */
+    height: 100%;
+    overflow-x: hidden;
+    /* Block pull-to-refresh and bounce overscroll on the document level */
+    overscroll-behavior: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+      Ubuntu, Cantarell, sans-serif;
+    background-color: #f4f6f8;
+    /* Improve font rendering on retina displays */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Remove the 300ms click delay on mobile */
+    touch-action: manipulation;
+    /* Suppress tap highlight flash on Android/iOS */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Root div must fill viewport and be a clipping boundary */
+  #root {
+    height: 100%;
+    /* Use dvh for the full interactive viewport (updates as address bar shows/hides) */
+    height: 100dvh;
+    overflow: hidden;
+    isolation: isolate;
   }
 }
 
+/* ─── Scrollbar utilities ──────────────────────────────────────────────────── */
 @layer utilities {
+  /* Hide scrollbar visually but keep scrollability */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Thin scrollbar for panels */
   .scrollbar-thin {
     scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
+    height: 4px;
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: rgba(0,0,0,0.2);
+    background-color: rgba(0, 0, 0, 0.15);
     border-radius: 4px;
   }
+
+  /* ── Safe-area utilities (iPhone X+ notch / home-indicator) ───────────── */
+  /* These ONLY work when viewport-fit=cover is set in <meta viewport> */
+
+  /* Raw safe-area values */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Bottom nav clearance: bottom-nav height (56px) + home indicator */
+  .pb-nav {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Height utilities that account for bottom nav */
+  .h-nav-safe {
+    height: calc(env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ── iOS smooth-momentum scrolling ───────────────────────────────────── */
+  .scroll-ios {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Prevent overscroll bounce on individual scroll containers */
+  .overscroll-contain {
+    overscroll-behavior: contain;
+  }
+  .overscroll-none {
+    overscroll-behavior: none;
+  }
+
+  /* ── Prevent any horizontal overflow from leaking ─────────────────────── */
+  .no-x-overflow {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* ── Touch-friendly tap target minimum ───────────────────────────────── */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* ── Smooth transition for mobile panels ─────────────────────────────── */
+  .panel-transition {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+  }
+}
+
+/* ─── Scroll container defaults ───────────────────────────────────────────── */
+/* Any element with overflow-y-auto or overflow-y-scroll gets iOS-smooth scroll */
+[class*='overflow-y-auto'],
+[class*='overflow-y-scroll'] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* ─── Prevent all horizontal overflow leakage ─────────────────────────────── */
+/* Belt-and-suspenders: tables and preformatted code can break horizontal layout */
+table {
+  border-collapse: collapse;
+}
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+  display: block;
+}
+
+/* ─── Focus visible — keyboard-only ring ─────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #25d366;
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
 }

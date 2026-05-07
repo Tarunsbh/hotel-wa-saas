@@ -45,7 +45,7 @@ function StatusBadge({ status }) {
 function Toast({ msg, type, onClose }) {
   useEffect(() => { const t = setTimeout(onClose, 4500); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-white text-sm max-w-sm ${type === 'error' ? 'bg-red-500' : 'bg-[#25D366]'}`}>
+    <div className={`fixed top-[72px] right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-white text-sm max-w-[calc(100vw-2rem)] ${type === 'error' ? 'bg-red-500' : 'bg-[#25D366]'}`}>
       {type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
       <span>{msg}</span>
     </div>
@@ -308,39 +308,42 @@ function CampaignWizard({ onClose, onSaved }) {
   const toggle = (step) => setOpenStep((p) => (p === step ? null : step));
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Wizard header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
-          <button
-            onClick={onClose}
-            className="flex items-center gap-2 text-gray-500 hover:text-gray-800 text-sm flex-shrink-0 self-start sm:self-auto"
-          >
-            <ArrowLeft size={16} />
-            <span>Back</span>
-          </button>
-          <input
-            value={campaignName}
-            onChange={(e) => setCampaignName(e.target.value)}
-            className="flex-1 text-base sm:text-lg font-semibold text-gray-800 border-none outline-none bg-transparent focus:ring-2 focus:ring-green-300 rounded px-1 min-w-0"
-            placeholder="Campaign name…"
-          />
-          <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-auto">
-            <span className="text-xs text-gray-400 hidden md:block">Balance: —</span>
+    <div className="min-h-full bg-[#F4F6F8] flex flex-col">
+      {/* Wizard header — sticky within the scrollable main container */}
+      <div className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          {/* Row 1 on mobile: back + name. Row 1 on sm+: back + name + buttons all inline */}
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 text-sm flex-shrink-0 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <ArrowLeft size={15} />
+              <span className="hidden sm:inline">Back</span>
+            </button>
+            <input
+              value={campaignName}
+              onChange={(e) => setCampaignName(e.target.value)}
+              className="flex-1 text-sm sm:text-base font-semibold text-gray-800 border-none outline-none bg-transparent focus:ring-2 focus:ring-[#25D366]/30 rounded-lg px-1 min-w-0"
+              placeholder="Campaign name…"
+            />
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleSaveDraft}
               disabled={loading || launching}
-              className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 font-medium"
             >
-              {loading && <Loader2 size={13} className="animate-spin" />}
-              Save as Draft
+              {loading && <Loader2 size={12} className="animate-spin" />}
+              <span className="hidden sm:inline">Save</span>
+              <span className="sm:hidden">Draft</span>
             </button>
             <button
               onClick={handleGoLive}
               disabled={loading || launching}
-              className="px-4 py-2 text-sm bg-[#25D366] text-white rounded-lg hover:bg-[#128C7E] disabled:opacity-50 flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs sm:text-sm bg-[#25D366] text-white rounded-xl hover:bg-[#128C7E] disabled:opacity-50 flex items-center gap-1.5 font-bold shadow-sm shadow-[#25D366]/25"
             >
-              {launching && <Loader2 size={13} className="animate-spin" />}
+              {launching && <Loader2 size={12} className="animate-spin" />}
               {launching ? 'Launching…' : 'Go Live'}
             </button>
           </div>
@@ -355,9 +358,9 @@ function CampaignWizard({ onClose, onSaved }) {
         )}
       </div>
 
-      {/* Two-column body */}
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
-        <div className="flex flex-col lg:flex-row gap-6">
+      {/* Two-column body — pb-nav accounts for mobile bottom nav clearance */}
+      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 pb-nav lg:pb-6">
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
           {/* Left: accordion steps */}
           <div className="flex-1 min-w-0 space-y-3">
 
